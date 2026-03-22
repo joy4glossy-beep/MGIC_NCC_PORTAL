@@ -1,5 +1,5 @@
 flask
-google-generativeai
 gspread
 oauth2client
+google-generativeai
 gunicorn
