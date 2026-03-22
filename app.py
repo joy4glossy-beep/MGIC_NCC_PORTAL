@@ -7,7 +7,7 @@ import google.generativeai as genai
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "MGIC_NCC_2026_V3_5_VOICE"
+app.secret_key = "MGIC_NCC_2026_V3_6_STABLE"
 
 # --- 1. रेंडर और गूगल शीट का पक्का कनेक्शन ---
 def get_sheet(sheet_name):
@@ -30,7 +30,7 @@ def log_usage(reg_no, action, query="-"):
     except:
         pass
 
-# --- 3. एडवांस डिजाइन (Mic Button के साथ) ---
+# --- 3. डिजाइन (CSS) ---
 UI_STYLE = '''
 <style>
     body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding-bottom: 50px; text-align: center; color: #333; -webkit-font-smoothing: antialiased; }
@@ -40,13 +40,13 @@ UI_STYLE = '''
     @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     .main-card { background: white; padding: 20px; margin: 15px auto; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 85%; max-width: 400px; border-left: 8px solid #003366; transition: 0.3s; cursor: pointer; text-align: left; }
     .btn { background: #003366; color: white; padding: 12px 25px; border-radius: 10px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; display: inline-block; }
-    .mic-btn { background: #ff5500; color: white; width: 50px; height: 50px; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; margin-left: 10px; vertical-align: middle; }
+    .mic-btn { background: #ff5500; color: white; width: 50px; height: 50px; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; margin-left: 10px; vertical-align: middle; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
     .content-box { background: white; margin: 15px auto; padding: 20px; border-radius: 15px; width: 90%; text-align: left; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     input { padding: 12px; border-radius: 10px; border: 1px solid #ddd; width: 70%; margin-bottom: 10px; font-size: 16px; vertical-align: middle; }
 </style>
 '''
 
-# --- 4. लॉगिन और लॉगआउट ---
+# --- 4. लॉगिन/डैशबोर्ड ---
 @app.route('/')
 def login_page():
     if 'user' in session: return redirect('/dashboard')
@@ -62,21 +62,18 @@ def login():
                 session['user'] = row.get('Name')
                 session['reg_no'] = u_id
                 session['rank'] = row.get('Rank', 'Cadet')
-                session['history'] = []
                 log_usage(u_id, "Login Success")
                 return redirect('/dashboard')
         return "विवरण गलत है! <a href='/'>Retry</a>"
     except Exception as e: return f"Error: {str(e)}"
 
-# --- 5. स्मार्ट डैशबोर्ड ---
 @app.route('/dashboard')
 def dashboard():
     if 'user' not in session: return redirect('/')
     try:
         settings = get_sheet("Admin_Settings").get_all_records()
-        notice = next((item['Value'] for item in settings if item['Feature'] == 'Notice'), "जय हिंद कैडेट्स!")
-    except:
-        notice = "सूचना उपलब्ध नहीं है।"
+        notice = next((item['Value'] for item in settings if item['Feature'] == 'Notice'), "जय हिंद!")
+    except: notice = "सूचना उपलब्ध नहीं है।"
 
     return UI_STYLE + f'''
     <div class="header"><span>जय हिंद, {session['rank']} {session['user']}!</span><a href="/logout" style="color:white; text-decoration:none;">Logout</a></div>
@@ -88,51 +85,43 @@ def dashboard():
     </div>
     '''
 
-# --- 6. एआई सूबेदार (Voice + Fix) ---
+# --- 5. एआई सूबेदार (Fixed Path & Brackets) ---
 @app.route('/ai', methods=['GET', 'POST'])
 def ai():
     if 'user' not in session: return redirect('/')
     ans = ""
     if request.method == 'POST':
         user_q = request.form.get('q')
-        api_key = os.environ.get('GEMINI_API_KEY')
         try:
-            genai.configure(api_key=api_key)
-            # FIXED: Added 'models/' prefix
+            genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
             model = genai.GenerativeModel('models/gemini-1.5-flash')
-            prompt = f"आप MGIC NCC के सूबेदार मेजर हैं। कैडेट {session['user']} का सवाल: {user_q}. अनुशासित लहजे में हिंदी/इंग्लिश में जवाब दें।"
-            res = model.generate_content(prompt)
+            res = model.generate_content(f"आप MGIC NCC के सूबेदार मेजर हैं। कैडेट {session['user']} का सवाल: {user_q}")
             ans = res.text
             log_usage(session['reg_no'], "AI Query", user_q)
-        except Exception as e:
-            ans = f"कनेक्शन एरर: {str(e)}"
+        except Exception as e: ans = f"त्रुटि: {str(e)}"
 
     return UI_STYLE + f'''
     <div class="header"><h2>एआई सूबेदार</h2><a href="/dashboard" style="color:white;">Back</a></div>
     <div class="content-box">
-        <form method="post" id="aiForm">
+        <form method="post">
             <input name="q" id="qInput" placeholder="पूछें, कैडेट..." required autofocus>
             <button type="button" class="mic-btn" onclick="startDictation()">🎤</button>
             <br><br><button type="submit" class="btn">Ask</button>
         </form>
         <div style="margin-top:20px; border-left:4px solid #ff5500; padding:10px; background:#fffcf5;">
-            <strong>सूबेदार मेजर:</strong><p style="white-space: pre-wrap;">{ans}</p>
+            <strong>जवाब:</strong><p style="white-space: pre-wrap;">{ans}</p>
         </div>
     </div>
     <script>
         function startDictation() {{
             if (window.hasOwnProperty('webkitSpeechRecognition')) {{
                 var recognition = new webkitSpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
                 recognition.lang = "hi-IN";
-                recognition.start();
                 recognition.onresult = function(e) {{
                     document.getElementById('qInput').value = e.results[0][0].transcript;
-                    recognition.stop();
                 }};
-                recognition.onerror = function(e) {{ recognition.stop(); }};
-            }} else {{ alert("Voice not supported on this browser."); }}
+                recognition.start();
+            }} else {{ alert("Voice not supported."); }}
         }}
     </script>
     '''
@@ -143,44 +132,28 @@ def subjects_list():
     lib = get_sheet("Content_Library").get_all_records()
     topics = sorted(list(set([row.get('Topic_Name') for row in lib if row.get('Topic_Name')])))
     html = '<div class="header"><h2>विषय सूची</h2><a href="/dashboard" style="color:white;">Back</a></div>'
-    for t in topics:
-        html += f'<div class="main-card" onclick="window.location.href=\'/view_subject/{t}\'"><h3>{t}</h3></div>'
+    for t in topics: html += f'<div class="main-card" onclick="window.location.href=\'/view_subject/{t}\'"><h3>{t}</h3></div>'
     return UI_STYLE + html
 
 @app.route('/view_subject/<name>')
 def view_subject(name):
     if 'user' not in session: return redirect('/')
     lib = get_sheet("Content_Library").get_all_records()
-    content_html = f'<div class="header"><h2>{name}</h2><a href="/subjects_list" style="color:white;">Back</a></div>'
+    html = f'<div class="header"><h2>{name}</h2><a href="/subjects_list" style="color:white;">Back</a></div>'
     for v in lib:
         if v.get('Topic_Name') == name:
-            link = v.get('Link', '')
-            v_id = link.split("v=")[-1] if "v=" in link else link.split("/")[-1]
-            content_html += f'''
-            <div class="content-box">
-                <p>{v.get('Description', '')}</p>
-                <iframe width="100%" height="220" src="https://www.youtube.com/embed/{v_id}" frameborder="0" allowfullscreen style="border-radius:10px;"></iframe>
-            </div>
-            '''
-    return UI_STYLE + content_html
+            v_id = v.get('Link', '').split("v=")[-1] if "v=" in v.get('Link','') else v.get('Link','').split("/")[-1]
+            html += f'<div class="content-box"><p>{v.get("Description","")}</p><iframe width="100%" height="220" src="https://www.youtube.com/embed/{v_id}" frameborder="0" allowfullscreen style="border-radius:10px;"></iframe></div>'
+    return UI_STYLE + html
 
 @app.route('/quiz_main')
 def quiz_main():
     if 'user' not in session: return redirect('/')
     questions = get_sheet("Quiz_Data").get_all_records()
-    q_html = f'<div class="header"><h2>NCC क्विज</h2><a href="/dashboard" style="color:white;">Back</a></div>'
+    html = f'<div class="header"><h2>NCC क्विज</h2><a href="/dashboard" style="color:white;">Back</a></div>'
     for i, q in enumerate(questions[:10]):
-        q_html += f'''
-        <div class="content-box">
-            <p><strong>{i+1}. {q.get('Question')}</strong></p>
-            <input type="radio" name="q{i}"> {q.get('Option_A')}<br>
-            <input type="radio" name="q{i}"> {q.get('Option_B')}<br>
-            <input type="radio" name="q{i}"> {q.get('Option_C')}<br>
-            <input type="radio" name="q{i}"> {q.get('Option_D')}
-        </div>
-        '''
-    q_html += '<div style="padding:20px;"><button class="btn" onclick="alert(\'Score Saved!\')">Submit</button></div>'
-    return UI_STYLE + q_html
+        html += f'<div class="content-box"><p><strong>{i+1}. {q.get("Question")}</strong></p><input type="radio"> {q.get("Option_A")}<br><input type="radio"> {q.get("Option_B")}<br><input type="radio"> {q.get("Option_C")}<br><input type="radio"> {q.get("Option_D")}</div>'
+    return UI_STYLE + html + '<div style="padding:20px;"><button class="btn" onclick="alert(\'Score Saved!\')">Submit</button></div>'
 
 @app.route('/logout')
 def logout():
