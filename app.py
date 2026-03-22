@@ -7,7 +7,7 @@ import google.generativeai as genai
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "MGIC_NCC_2026_V3_ULTIMATE"
+app.secret_key = "MGIC_NCC_2026_V3_5_VOICE"
 
 # --- 1. रेंडर और गूगल शीट का पक्का कनेक्शन ---
 def get_sheet(sheet_name):
@@ -21,16 +21,16 @@ def get_sheet(sheet_name):
     client = gspread.authorize(creds)
     return client.open("NCC_Smart_Portal_Data").worksheet(sheet_name)
 
-# --- 2. स्मार्ट लॉगर फंक्शन (Usage Logs) ---
+# --- 2. स्मार्ट लॉगर फंक्शन ---
 def log_usage(reg_no, action, query="-"):
     try:
         sheet = get_sheet("Usage_Logs")
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sheet.append_row([now, reg_no, action, query])
     except:
-        pass # अगर लॉग फेल हो तो पोर्टल न रुके
+        pass
 
-# --- 3. एडवांस डिजाइन ---
+# --- 3. एडवांस डिजाइन (Mic Button के साथ) ---
 UI_STYLE = '''
 <style>
     body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding-bottom: 50px; text-align: center; color: #333; -webkit-font-smoothing: antialiased; }
@@ -39,10 +39,10 @@ UI_STYLE = '''
     .notice-text { display: inline-block; animation: marquee 15s linear infinite; }
     @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     .main-card { background: white; padding: 20px; margin: 15px auto; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 85%; max-width: 400px; border-left: 8px solid #003366; transition: 0.3s; cursor: pointer; text-align: left; }
-    .main-card:active { transform: scale(0.95); }
     .btn { background: #003366; color: white; padding: 12px 25px; border-radius: 10px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; display: inline-block; }
+    .mic-btn { background: #ff5500; color: white; width: 50px; height: 50px; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; margin-left: 10px; vertical-align: middle; }
     .content-box { background: white; margin: 15px auto; padding: 20px; border-radius: 15px; width: 90%; text-align: left; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    input { padding: 12px; border-radius: 10px; border: 1px solid #ddd; width: 85%; margin-bottom: 10px; font-size: 16px; }
+    input { padding: 12px; border-radius: 10px; border: 1px solid #ddd; width: 70%; margin-bottom: 10px; font-size: 16px; vertical-align: middle; }
 </style>
 '''
 
@@ -68,12 +68,10 @@ def login():
         return "विवरण गलत है! <a href='/'>Retry</a>"
     except Exception as e: return f"Error: {str(e)}"
 
-# --- 5. स्मार्ट डैशबोर्ड (Dynamic Notice के साथ) ---
+# --- 5. स्मार्ट डैशबोर्ड ---
 @app.route('/dashboard')
 def dashboard():
     if 'user' not in session: return redirect('/')
-    
-    # शीट से ताजा नोटिस उठाना
     try:
         settings = get_sheet("Admin_Settings").get_all_records()
         notice = next((item['Value'] for item in settings if item['Feature'] == 'Notice'), "जय हिंद कैडेट्स!")
@@ -86,11 +84,11 @@ def dashboard():
     <div style="padding-top:10px;">
         <div class="main-card" onclick="window.location.href='/subjects_list'"><h2>📘 ट्रेनिंग लाइब्रेरी</h2><p>वीडियो और नोट्स देखें</p></div>
         <div class="main-card" onclick="window.location.href='/quiz_main'"><h2>📝 प्रैक्टिस टेस्ट</h2><p>स्कोर चेक करें</p></div>
-        <div class="main-card" onclick="window.location.href='/ai'" style="border-left-color: #ff5500;"><h2>🤖 एआई सूबेदार</h2><p>स्मार्ट असिस्टेंट से पूछें</p></div>
+        <div class="main-card" onclick="window.location.href='/ai'" style="border-left-color: #ff5500;"><h2>🤖 एआई सूबेदार</h2><p>बोलकर या लिखकर पूछें</p></div>
     </div>
     '''
 
-# --- 6. एआई सूबेदार (Log entries के साथ) ---
+# --- 6. एआई सूबेदार (Voice + Fix) ---
 @app.route('/ai', methods=['GET', 'POST'])
 def ai():
     if 'user' not in session: return redirect('/')
@@ -100,29 +98,48 @@ def ai():
         api_key = os.environ.get('GEMINI_API_KEY')
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            chat_context = f"आप MGIC NCC के सूबेदार मेजर हैं। कैडेट {session['user']} ({session['rank']}) का सवाल: {user_q}"
-            res = model.generate_content(chat_context)
+            # FIXED: Added 'models/' prefix
+            model = genai.GenerativeModel('models/gemini-1.5-flash')
+            prompt = f"आप MGIC NCC के सूबेदार मेजर हैं। कैडेट {session['user']} का सवाल: {user_q}. अनुशासित लहजे में हिंदी/इंग्लिश में जवाब दें।"
+            res = model.generate_content(prompt)
             ans = res.text
             log_usage(session['reg_no'], "AI Query", user_q)
         except Exception as e:
-            ans = f"नेटवर्क बाधा: {str(e)}"
+            ans = f"कनेक्शन एरर: {str(e)}"
 
     return UI_STYLE + f'''
     <div class="header"><h2>एआई सूबेदार</h2><a href="/dashboard" style="color:white;">Back</a></div>
     <div class="content-box">
-        <form method="post"><input name="q" placeholder="पूछें, कैडेट..." required autofocus><button type="submit" class="btn">Ask</button></form>
+        <form method="post" id="aiForm">
+            <input name="q" id="qInput" placeholder="पूछें, कैडेट..." required autofocus>
+            <button type="button" class="mic-btn" onclick="startDictation()">🎤</button>
+            <br><br><button type="submit" class="btn">Ask</button>
+        </form>
         <div style="margin-top:20px; border-left:4px solid #ff5500; padding:10px; background:#fffcf5;">
             <strong>सूबेदार मेजर:</strong><p style="white-space: pre-wrap;">{ans}</p>
         </div>
     </div>
+    <script>
+        function startDictation() {{
+            if (window.hasOwnProperty('webkitSpeechRecognition')) {{
+                var recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = "hi-IN";
+                recognition.start();
+                recognition.onresult = function(e) {{
+                    document.getElementById('qInput').value = e.results[0][0].transcript;
+                    recognition.stop();
+                }};
+                recognition.onerror = function(e) {{ recognition.stop(); }};
+            }} else {{ alert("Voice not supported on this browser."); }}
+        }}
+    </script>
     '''
 
-# --- 7. लाइब्रेरी और क्विज ---
 @app.route('/subjects_list')
 def subjects_list():
     if 'user' not in session: return redirect('/')
-    log_usage(session['reg_no'], "View Library")
     lib = get_sheet("Content_Library").get_all_records()
     topics = sorted(list(set([row.get('Topic_Name') for row in lib if row.get('Topic_Name')])))
     html = '<div class="header"><h2>विषय सूची</h2><a href="/dashboard" style="color:white;">Back</a></div>'
@@ -150,7 +167,6 @@ def view_subject(name):
 @app.route('/quiz_main')
 def quiz_main():
     if 'user' not in session: return redirect('/')
-    log_usage(session['reg_no'], "Started Quiz")
     questions = get_sheet("Quiz_Data").get_all_records()
     q_html = f'<div class="header"><h2>NCC क्विज</h2><a href="/dashboard" style="color:white;">Back</a></div>'
     for i, q in enumerate(questions[:10]):
