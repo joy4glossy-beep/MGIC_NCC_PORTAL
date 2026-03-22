@@ -6,118 +6,138 @@ from oauth2client.service_account import ServiceAccountCredentials
 import google.generativeai as genai
 
 app = Flask(__name__)
-app.secret_key = "MGIC_NCC_ULTIMATE_SUCCESS_2026"
+app.secret_key = "MGIC_NCC_2026_ULTIMATE_FINAL_VERSION"
 
-# --- 1. रेंडर की तिजोरी से डेटा खींचने का 'ऑटोमेशन' ---
-
-def get_gspread_client():
-    # रेंडर की एनवायरनमेंट से चाबी उठाना
+# --- 1. रेंडर की तिजोरी से चाबियाँ उठाना (The Authentication) ---
+def get_sheet(sheet_name):
+    # रेंडर से गूगल शीट की चाबी उठाना
     json_key = os.environ.get('SERVICE_ACCOUNT_JSON')
     if not json_key:
-        raise ValueError("SERVICE_ACCOUNT_JSON missing in Render Environment!")
+        raise ValueError("SERVICE_ACCOUNT_JSON missing in Render!")
     
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(json_key)
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    return gspread.authorize(creds)
+    client = gspread.authorize(creds)
+    # आपकी शीट का नाम (URL से पहचाना गया)
+    return client.open("NCC_Smart_Portal_Data").worksheet(sheet_name)
 
-def get_ai_instructor(prompt):
-    api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key:
-        return "AI चाबी (API Key) नहीं मिली!"
-    
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    # AI को इंस्ट्रक्टर की तरह व्यवहार करने का आदेश
-    full_prompt = f"आप महात्मा गांधी इंटर कॉलेज के एक सीनियर NCC सूबेदार हैं। अनुशासित और मददगार लहजे में हिंदी में जवाब दें: {prompt}"
-    try:
-        response = model.generate_content(full_prompt)
-        return response.text
-    except:
-        return "माफ़ करना कैडेट, सिग्नल में गड़बड़ है।"
+# --- 2. प्रोफेशनल डिजाइन (UI/CSS) ---
+UI_STYLE = '''
+<style>
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; text-align: center; color: #333; }
+    .header { background: linear-gradient(135deg, #003366, #00509d); color: white; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+    .main-card { background: white; padding: 25px; margin: 20px auto; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 85%; max-width: 400px; border-bottom: 6px solid #003366; transition: 0.3s; }
+    .main-card:hover { transform: translateY(-5px); }
+    .btn { background: #003366; color: white; padding: 12px 25px; border-radius: 10px; text-decoration: none; display: inline-block; font-weight: bold; border: none; cursor: pointer; }
+    .content-box { background: white; margin: 15px auto; padding: 20px; border-radius: 15px; width: 90%; text-align: left; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    input { padding: 12px; border-radius: 8px; border: 1px solid #ccc; width: 80%; margin-bottom: 10px; }
+</style>
+'''
 
-# --- 2. मुख्य रूट्स (पोर्टल के फंक्शन्स) ---
-
+# --- 3. लॉगिन का रास्ता ---
 @app.route('/')
 def login_page():
     if 'user' in session: return redirect('/dashboard')
-    # प्रोफेशनल लॉगिन पेज (Inline HTML)
-    return '''
-    <body style="text-align:center; font-family:sans-serif; background:#f0f2f5; padding-top:100px;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/NCC_logo.png" width="80"><br>
-        <h2>MGIC NCC स्मार्ट पोर्टल</h2>
-        <form action="/login" method="post" style="display:inline-block; background:white; padding:30px; border-radius:15px; box-shadow:0 4px 10px rgba(0,0,0,0.1);">
-            <input type="text" name="reg_no" placeholder="Reg No (TEST001)" required style="width:250px; padding:10px; margin-bottom:15px; border:1px solid #ccc; border-radius:5px;"><br>
-            <input type="password" name="password" placeholder="Password" required style="width:250px; padding:10px; margin-bottom:15px; border:1px solid #ccc; border-radius:5px;"><br>
-            <button type="submit" style="width:272px; padding:10px; background:#003366; color:white; border:none; border-radius:5px; cursor:pointer;">लॉगिन करें</button>
-        </form>
-    </body>
-    '''
+    return UI_STYLE + '<div style="padding-top:100px;"><h2>MGIC NCC पोर्टल</h2><form action="/login" method="post"><input name="id" placeholder="Reg No" required><br><input name="pw" type="password" placeholder="Password" required><br><button type="submit" class="btn">लॉगिन</button></form></div>'
 
 @app.route('/login', methods=['POST'])
 def login():
-    reg_no = request.form.get('reg_no').strip()
-    password = request.form.get('password').strip()
+    u_id, u_pw = request.form.get('id').strip(), request.form.get('pw').strip()
     try:
-        client = get_gspread_client()
-        sheet = client.open("NCC_Smart_Portal_Data").worksheet("Cadet_Master")
-        records = sheet.get_all_records()
+        records = get_sheet("Cadet_Master").get_all_records()
         for row in records:
-            if str(row['Reg_No']) == reg_no and str(row['Password']) == password:
-                session['user'] = row['Name']
+            if str(row.get('Reg_No')) == u_id and str(row.get('Password')) == u_pw:
+                session['user'] = row.get('Name')
                 return redirect('/dashboard')
-        return "विवरण सही नहीं हैं! <a href='/'>Retry</a>"
-    except Exception as e:
-        return f"गूगल शीट कनेक्शन फेल: {str(e)}"
+        return "गलत आईडी/पासवर्ड! <a href='/'>Retry</a>"
+    except Exception as e: return f"कनेक्शन एरर: {str(e)}"
 
+# --- 4. डैशबोर्ड (सिर्फ 3 मुख्य बटन) ---
 @app.route('/dashboard')
 def dashboard():
     if 'user' not in session: return redirect('/')
-    return f'''
-    <body style="font-family:sans-serif; background:#f4f7f6; padding:20px;">
-        <nav style="background:#003366; color:white; padding:15px; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
-            <span>जय हिंद, {session['user']}!</span>
-            <a href="/logout" style="color:white; text-decoration:none; border:1px solid white; padding:5px 10px; border-radius:5px;">Logout</a>
-        </nav>
-        <div style="display:flex; gap:20px; margin-top:30px; flex-wrap:wrap;">
-            <div style="background:white; padding:20px; border-radius:10px; flex:1; min-width:250px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
-                <h3>🤖 AI सूबेदार</h3>
-                <p>NCC ट्रेनिंग से जुड़े सवाल पूछें</p>
-                <a href="/ai" style="display:inline-block; padding:10px 20px; background:#004080; color:white; text-decoration:none; border-radius:5px;">पूछें</a>
-            </div>
-            <div style="background:white; padding:20px; border-radius:10px; flex:1; min-width:250px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
-                <h3>📝 ऑनलाइन टेस्ट</h3>
-                <p>क्विज और तैयारी जांचें</p>
-                <a href="/quiz" style="display:inline-block; padding:10px 20px; background:#004080; color:white; text-decoration:none; border-radius:5px;">शुरू करें</a>
-            </div>
-        </div>
-    </body>
+    return UI_STYLE + f'''
+    <div class="header"><span>जय हिंद, {session['user']}!</span><a href="/logout" style="color:white; text-decoration:none; font-weight:bold;">Log Out</a></div>
+    <div style="padding-top:20px;">
+        <div class="main-card" onclick="window.location.href='/subjects_list'"><h2>📘 विषय (Subjects)</h2><p>वीडियो और नोट्स देखें</p></div>
+        <div class="main-card" onclick="window.location.href='/quiz_main'"><h2>📝 क्विज (Quiz)</h2><p>प्रैक्टिस टेस्ट दें</p></div>
+        <div class="main-card" onclick="window.location.href='/ai'"><h2>🤖 एआई सूबेदार</h2><p>सवाल पूछें</p></div>
+    </div>
     '''
 
+# --- 5. विषयों की लिस्ट और कंटेंट ---
+@app.route('/subjects_list')
+def subjects_list():
+    if 'user' not in session: return redirect('/')
+    lib = get_sheet("Content_Library").get_all_records()
+    topics = sorted(list(set([row['Topic_Name'] for row in lib])))
+    html = '<div class="header"><h2>सभी विषय</h2><a href="/dashboard" style="color:white;">Back</a></div>'
+    for t in topics:
+        html += f'<div class="main-card" onclick="window.location.href=\'/view_subject/{t}\'"><h3>{t}</h3></div>'
+    return UI_STYLE + html
+
+@app.route('/view_subject/<name>')
+def view_subject(name):
+    if 'user' not in session: return redirect('/')
+    lib = get_sheet("Content_Library").get_all_records()
+    content_html = f'<div class="header"><h2>{name}</h2><a href="/subjects_list" style="color:white;">Back</a></div>'
+    for v in lib:
+        if v['Topic_Name'] == name:
+            v_id = v['Link'].split("v=")[-1] if "v=" in v['Link'] else v['Link'].split("/")[-1]
+            content_html += f'''
+            <div class="content-box">
+                <p style="font-size:17px; line-height:1.6;">{v.get('Description', 'कोई नोट्स उपलब्ध नहीं हैं।')}</p>
+                <iframe width="100%" height="230" src="https://www.youtube.com/embed/{v_id}" frameborder="0" allowfullscreen style="border-radius:12px; margin-top:10px;"></iframe>
+            </div>
+            '''
+    return UI_STYLE + content_html
+
+# --- 6. क्विज सेक्शन (आपकी शीट के हिसाब से) ---
+@app.route('/quiz_main')
+def quiz_main():
+    if 'user' not in session: return redirect('/')
+    questions = get_sheet("Quiz_Data").get_all_records()
+    q_html = f'<div class="header"><h2>प्रैक्टिस क्विज</h2><a href="/dashboard" style="color:white;">Back</a></div>'
+    for i, q in enumerate(questions):
+        q_html += f'''
+        <div class="content-box">
+            <p><strong>Q{i+1}: {q["Question"]}</strong></p>
+            <label><input type="radio" name="q{i}"> {q["Option_A"]}</label><br>
+            <label><input type="radio" name="q{i}"> {q["Option_B"]}</label><br>
+            <label><input type="radio" name="q{i}"> {q["Option_C"]}</label><br>
+            <label><input type="radio" name="q{i}"> {q["Option_D"]}</label>
+        </div>
+        '''
+    q_html += '<button class="btn" style="margin:20px;" onclick="alert(\'स्कोर सबमिट हो गया!\')">सबमिट करें</button><br><br>'
+    return UI_STYLE + q_html
+
+# --- 7. एआई सूबेदार (Gemini Integration) ---
 @app.route('/ai', methods=['GET', 'POST'])
-def ai_page():
+def ai():
     if 'user' not in session: return redirect('/')
     ans = ""
     if request.method == 'POST':
-        ans = get_ai_instructor(request.form.get('q'))
-    return f'''
-    <body style="font-family:sans-serif; padding:20px; background:#eef2f3;">
-        <h3>🤖 AI सूबेदार मेजर (MGIC NCC)</h3>
-        <form method="post" style="margin-bottom:20px;">
-            <input name="q" placeholder="पूछें, कैडेट..." style="width:70%; padding:10px;">
-            <button style="padding:10px 20px; background:#003366; color:white; border:none;">Ask</button>
+        api_key = os.environ.get('GEMINI_API_KEY')
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        prompt = f"आप MGIC NCC के एक सीनियर सूबेदार मेजर हैं। कैडेट्स को अनुशासित लहजे में हिंदी में जवाब दें: {request.form.get('q')}"
+        try:
+            res = model.generate_content(prompt)
+            ans = res.text
+        except: ans = "सिग्नल में बाधा है, फिर से पूछें।"
+    return UI_STYLE + f'''
+    <div class="header"><h2>एआई सूबेदार</h2><a href="/dashboard" style="color:white;">Back</a></div>
+    <div class="content-box">
+        <form method="post">
+            <input name="q" placeholder="पूछें, कैडेट..." required style="width:70%;">
+            <button type="submit" class="btn">Ask</button>
         </form>
-        <div style="background:white; padding:15px; border-radius:10px; min-height:100px; border-left:5px solid #003366;">
+        <div style="margin-top:20px; border-left:5px solid #003366; padding-left:15px; color:#444;">
             <strong>जवाब:</strong><p>{ans}</p>
         </div>
-        <br><a href="/dashboard">वापस डैशबोर्ड पर</a>
-    </body>
+    </div>
     '''
-
-@app.route('/quiz')
-def quiz():
-    if 'user' not in session: return redirect('/')
-    return "<h3>क्विज सेक्शन जल्द ही चालू होगा (Google Sheet से कनेक्ट हो रहा है...)</h3><a href='/dashboard'>Back</a>"
 
 @app.route('/logout')
 def logout():
@@ -125,6 +145,4 @@ def logout():
     return redirect('/')
 
 if __name__ == "__main__":
-    # रेंडर के डायनामिक पोर्ट को हैंडल करना
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
