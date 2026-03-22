@@ -1,137 +1,266 @@
-import google.generativeai as genai
-from flask import Flask, render_template, request, redirect, session, jsonify
+import os
+import json
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os
+import google.generativeai as genai
 
 app = Flask(__name__)
-app.secret_key = "MGIC_NCC_2026_ULTIMATE_FINAL"
+app.secret_key = "MGIC_NCC_PORTAL_ULTIMATE_2026"
 
-# --- 1. जेमिनी (Gemini AI) सेटअप ---
-genai.configure(api_key="AIzaSyAzeeXAr3RCQ5QNKlzPztcjcvQvgkwGLGY")
+# --- 1. CONFIGURATION & SETUP ---
+
+# AI Setup (Gemini) - Render से Key उठाना
+GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
+if not GEMINI_KEY:
+    raise ValueError("Error: GEMINI_API_KEY not found in Render Environment!")
+genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 2. Google Sheet 'पक्का' कनेक्शन (Updated with Latest Credentials) ---
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-# आपकी लेटेस्ट फाइल का नाम यहाँ सेट कर दिया है
-json_file = "mgic-ncc-portal-293fd396bb7b.json"
-
-try:
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    json_path = os.path.join(base_path, json_file)
+# Google Sheets Setup - Render से JSON चाबी उठाना
+def get_gspread_client():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    json_key = os.environ.get('SERVICE_ACCOUNT_JSON')
+    if not json_key:
+        raise ValueError("Error: SERVICE_ACCOUNT_JSON not found in Render Environment!")
     
-    # कनेक्शन क्रेडेंशियल्स
-    creds = ServiceAccountCredentials.from_json_keyfile_name(json_path, scope)
-    client_sheet = gspread.authorize(creds)
-    spreadsheet = client_sheet.open("NCC_Smart_Portal_Data")
-    print("✅ जय हिंद! MGIC NCC बैकएंड अब पूरी तरह से जुड़ चुका है।")
-except Exception as e:
-    print(f"❌ कनेक्शन एरर: {e}")
-    print("सुझाव: पक्का करें कि फाइल का नाम फोल्डर में 'mgic-ncc-portal-293fd396bb7b.json' ही है।")
+    creds_dict = json.loads(json_key)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    return gspread.authorize(creds)
 
-# --- 3. यूआई (UI) और डिजाइन फंक्शन ---
-def get_header(title):
-    return f'''
+# आपकी Google Sheet का नाम
+SHEET_NAME = "NCC_Smart_Portal_Data"
+
+# डिजाइन के लिए ऑनलाइन फोटो लिंक्स (इन्हें आप बदल भी सकते हैं)
+BG_IMAGE = "https://images.unsplash.com/photo-1599661046289-e31897846e41?q=80&w=1920" # Indian Flag/Army Background
+LOGO_IMAGE = "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/NCC_logo.png/220px-NCC_logo.png" # NCC Logo
+
+# --- 2. HTML TEMPLATES (Inline for complete structure) ---
+
+HTML_HEADER = f"""
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MGIC NCC स्मार्ट पोर्टल</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body {{ font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding-bottom: 60px; }}
-        .header {{ background: linear-gradient(135deg, #1a5276 0%, #002147 100%); color: white; padding: 25px; text-align: center; border-bottom: 6px solid #d9534f; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }}
-        .card {{ background: white; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); padding: 20px; margin: 20px auto; max-width: 800px; border-left: 8px solid #1a5276; }}
-        .btn {{ background: #1a5276; color: white; border: none; padding: 12px 22px; border-radius: 8px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; transition: 0.3s; }}
-        .btn:hover {{ background: #d9534f; transform: scale(1.05); }}
-    </style>
-    <div class="header">
-        <h1 style="margin:0;">{title}</h1>
-        <p style="margin:5px 0 0 0;"><b>CTO कृष्णा पाल सिंह • MGIC</b></p>
-    </div>
-    <script>
-        function speak(text) {{
-            window.speechSynthesis.cancel();
-            let speech = new SpeechSynthesisUtterance(text.replace(/<[^>]*>?/gm,""));
-            speech.lang = 'hi-IN';
-            window.speechSynthesis.speak(speech);
+        body {{
+            background: url('{BG_IMAGE}') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
         }}
-    </script>
-    '''
+        .overlay {{
+            background: rgba(255, 255, 255, 0.85);
+            min-height: 100vh;
+        }}
+        .navbar {{ background-color: #003366 !important; }} /* Navy Blue */
+        .card {{
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }}
+        .card:hover {{ transform: translateY(-5px); }}
+        .btn-primary {{ background-color: #004080; border: none; }}
+        .btn-primary:hover {{ background-color: #0059b3; }}
+    </style>
+</head>
+<body>
+<div class="overlay">
+"""
+
+HTML_FOOTER = """
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+"""
+
+NAVBAR = f"""
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container-fluid">
+    <img src="{LOGO_IMAGE}" alt="NCC Logo" height="40" class="d-inline-block align-text-top me-2">
+    <a class="navbar-brand" href="/dashboard">MGIC NCC पोर्टल</a>
+    <span class="navbar-text text-light me-3">जय हिंद, {{ user_name }}!</span>
+    <a href="/logout" class="btn btn-outline-light btn-sm">लॉगआउट</a>
+  </div>
+</nav>
+<div class="container mt-4">
+"""
+
+# --- 3. ROUTES & LOGIC ---
 
 @app.route('/')
 def login_page():
-    return '''<body style="background:#002147;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-    <div style="background:white;padding:40px;border-radius:25px;text-align:center;width:320px;box-shadow: 0 15px 40px rgba(0,0,0,0.5);">
-        <img src="https://www.indiancc.nic.in/wp-content/themes/ncc/images/logo.png" width="90">
-        <h2 style="color: #1a5276;">MGIC NCC लॉगिन</h2>
-        <form action="/login" method="post">
-            <input type="text" name="reg_no" placeholder="रेजिमेंटल नंबर" required style="width:100%; padding:14px; margin:10px 0; border:1px solid #ddd; border-radius:10px;">
-            <input type="password" name="pass" placeholder="पासवर्ड" required style="width:100%; padding:14px; margin:10px 0; border:1px solid #ddd; border-radius:10px;">
-            <button type="submit" class="btn" style="width:100%; margin-top:10px;">प्रवेश करें</button>
-        </form>
-    </div></body>'''
+    if 'user' in session: return redirect('/dashboard')
+    
+    return HTML_HEADER + f"""
+    <div class="container d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <div class="card p-5 text-center" style="max-width: 400px; width: 100%;">
+            <img src="{LOGO_IMAGE}" alt="NCC Logo" height="100" class="mx-auto d-block mb-3">
+            <h2 class="mb-4" style="color: #003366;">कैडेट लॉगिन</h2>
+            <form action="/login" method="post">
+                <input type="text" name="reg_no" class="form-control mb-3" placeholder="Reg No (e.g., TEST001)" required>
+                <input type="password" name="password" class="form-control mb-3" placeholder="पासवर्ड (e.g., 123)" required>
+                <button type="submit" class="btn btn-primary w-100">लॉगिन करें</button>
+            </form>
+            <p class="mt-3 text-muted">MGIC NCC इकाई</p>
+        </div>
+    </div>
+    """ + HTML_FOOTER
 
 @app.route('/login', methods=['POST'])
-def login_logic():
-    reg_no = str(request.form.get('reg_no')).strip()
-    password = str(request.form.get('pass')).strip()
+def login():
+    reg_no = request.form.get('reg_no').strip()
+    password = request.form.get('password').strip()
+    
     try:
-        master = spreadsheet.worksheet("Cadet_Master").get_all_records()
-        for c in master:
-            s_reg = str(c.get('Regimental_No', '')).strip()
-            s_pass = str(c.get('Password', '')).strip()
-            if s_reg == reg_no and s_pass == password:
-                session['user'], session['rank'] = c.get('Cadet_Name'), c.get('Rank')
+        client = get_gspread_client()
+        sheet = client.open(SHEET_NAME).worksheet("Cadet_Master")
+        records = sheet.get_all_records()
+        
+        for row in records:
+            if str(row['Reg_No']) == reg_no and str(row['Password']) == password:
+                session['user'] = reg_no
+                session['user_name'] = row['Name']
                 return redirect('/dashboard')
-    except: pass
-    return "<h1>विवरण सही नहीं हैं! <a href='/'>Retry</a></h1>"
+        
+        return HTML_HEADER + "<div class="container text-center mt-5"><h3>गलत Reg No या Password!</h3><a href="/" class="btn btn-primary">फिर से कोशिश करें</a></div>" + HTML_FOOTER
+    except Exception as e:
+        return f"लॉगिन एरर: {str(e)}"
 
 @app.route('/dashboard')
 def dashboard():
     if 'user' not in session: return redirect('/')
-    res = f'<body style="margin:0;">{get_header("स्वागत है, " + session["rank"] + " " + session["user"])}'
-    res += '<div style="max-width:850px;margin:40px auto;display:grid;grid-template-columns: 1fr 1fr;gap:25px;padding:20px;">'
-    res += '<a href="/subjects" style="text-decoration:none;"><div class="card" style="text-align:center; border-top:6px solid #ff9933;"><h2>📚 स्मार्ट नोट्स</h2></div></a>'
-    res += '<a href="/practice_test" style="text-decoration:none;"><div class="card" style="text-align:center; border-top:6px solid #138808;"><h2>🎯 प्रैक्टिस टेस्ट</h2></div></a>'
-    res += '</div><div id="chat-circle" onclick="document.getElementById(\'chat-box\').style.display=\'block\'" style="position:fixed;bottom:30px;right:30px;background:#1a5276;color:white;width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:35px;box-shadow:0 10px 30px rgba(0,0,0,0.3);">🤖</div>'
-    res += '<div id="chat-box" style="display:none;position:fixed;bottom:110px;right:30px;width:340px;height:480px;background:white;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2);overflow:hidden;z-index:1000;"><div style="background:#1a5276;color:white;padding:20px;font-weight:bold;">AI सूबेदार</div><div id="chat-content" style="padding:15px;height:330px;overflow-y:auto;background:#fafafa;"></div><div style="padding:10px;display:flex;gap:10px;border-top:1px solid #eee;"><input type="text" id="chat-input" placeholder="पूछें..." style="flex:1;padding:12px;border:1px solid #ddd;border-radius:10px;"><button onclick="askAI()" class="btn">Ask</button></div></div>'
-    res += '<script>function askAI(){let i=document.getElementById("chat-input").value;let c=document.getElementById("chat-content");if(!i)return;c.innerHTML+="<p style=\'text-align:right;background:#dcf8c6;padding:12px;border-radius:15px;margin-left:20%;\'>"+i+"</p>";document.getElementById("chat-input").value="";fetch("/ask_smart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:i})}).then(r=>r.json()).then(d=>{c.innerHTML+="<div onclick=\'speak(this.innerText)\' style=\'background:white;border:1px solid #eee;padding:12px;border-radius:15px;margin-bottom:10px;cursor:pointer;\'>🔊 "+d.response+"</div>";c.scrollTop=c.scrollHeight;});}</script></body>'
-    return res
+    
+    return HTML_HEADER + NAVBAR.replace("{{ user_name }}", session['user_name']) + """
+        <h2 class="mb-4">आपका डैशबोर्ड</h2>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h3>🤖 AI सूबेदार</h3>
+                    <p>NCC से जुड़े सवाल पूछें</p>
+                    <a href="/ai_teacher" class="btn btn-primary">पूछें</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h3>📝 ऑनलाइन टेस्ट</h3>
+                    <p>अपनी तैयारी जांचें</p>
+                    <a href="/quiz" class="btn btn-primary">टेस्ट दें</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <h3>📚 लाइब्रेरी</h3>
+                    <p>स्टडी मटेरियल और नोट्स</p>
+                    <a href="/library" class="btn btn-primary">पढ़ें</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    """ + HTML_FOOTER
 
-@app.route('/subjects')
-def subjects():
-    all_data = spreadsheet.worksheet("Content_Library").get_all_records()
-    subs = sorted(list(set([r['Subject'] for r in all_data if r['Subject']])))
-    html = get_header("विषय सूची") + '<div style="max-width:700px; margin:auto; padding:20px;"><a href="/dashboard" class="btn">⬅ वापस</a><br><br>'
-    for s in subs: html += f'<a href="/topics/{s}" style="text-decoration:none;"><div class="card"><h3>{s} ⮕</h3></div></a>'
-    return html + '</div>'
+# --- 4. FEATURE ROUTES (AI, QUIZ, LIBRARY) ---
 
-@app.route('/topics/<sub_name>')
-def topics(sub_name):
-    all_data = spreadsheet.worksheet("Content_Library").get_all_records()
-    filtered = [r for r in all_data if r['Subject'] == sub_name]
-    html = get_header(sub_name) + '<div style="padding:20px; max-width:800px; margin:auto;"><a href="/subjects" class="btn">⬅ वापस</a><br><br>'
-    for t in filtered:
-        img = f'<img src="{t.get("Photo_URL")}" style="width:100%;border-radius:15px;margin-bottom:15px;">' if t.get('Photo_URL') else ""
-        html += f'<div class="card"><h2>{t["Topic"]}</h2>{img}<p style="white-space:pre-wrap; font-size:16px;">{str(t["Topic_Details"])}</p><button onclick="speak(`{str(t["Topic_Details"]).replace("`","")}`)" class="btn">🔊 सुनाओ</button><a href="{t["Video_Link"]}" target="_blank" class="btn" style="background:#d9534f;margin-left:10px;">▶ वीडियो</a></div>'
-    return html + '</div>'
+@app.route('/ai_teacher', methods=['GET', 'POST'])
+def ai_teacher():
+    if 'user' not in session: return redirect('/')
+    
+    response = ""
+    if request.method == 'POST':
+        question = request.form.get('question')
+        try:
+            # AI को NCC के माहौल में ढालना
+            prompt = f"आप एक सीनियर NCC इंस्ट्रक्टर (सूबेदार) हैं। इस कैडेट के सवाल का हिंदी में अनुशासित जवाब दें: {question}"
+            ai_response = model.generate_content(prompt)
+            response = ai_response.text
+        except:
+            response = "माफ़ करना कैडेट, नेटवर्क में कुछ गड़बड़ है।"
 
-@app.route('/practice_test')
-def practice_test():
-    q_data = spreadsheet.worksheet("Quiz_Data").get_all_records()
-    html = get_header("प्रैक्टिस टेस्ट") + '<div style="max-width:750px; margin:auto; padding:20px;"><a href="/dashboard" class="btn">⬅ वापस</a><br><br>'
-    for i, q in enumerate(q_data):
-        opts = q['Options'].split(',')
-        opt_html = "".join([f'<div style="margin:10px 0;"><input type="radio" name="q{i}" value="{o.strip()}"> {o.strip()}</div>' for o in opts])
-        html += f'<div class="card" style="border-left:8px solid #138808;"><b>Q{i+1}: {q["Question"]}</b><br><br>{opt_html}<br><button onclick="checkAns(\'q{i}\', \'{q["Correct_Answer"]}\')" class="btn">चेक करें</button><span id="res_q{i}" style="margin-left:15px; font-weight:bold;"></span></div>'
-    html += '<script>function checkAns(n,c){let s=document.querySelector(`input[name="${n}"]:checked`);let r=document.getElementById("res_"+n);if(!s)return alert("Select!");if(s.value.trim()===c.trim()){r.innerHTML="✅ सही!";r.style.color="green";speak("सही जवाब");}else{r.innerHTML="❌ गलत!";r.style.color="red";speak("गलत जवाब");}}</script>'
-    return html + '</div>'
+    return HTML_HEADER + NAVBAR.replace("{{ user_name }}", session['user_name']) + f"""
+        <h3>🤖 AI सूबेदार मेजर</h3>
+        <form method="post" class="mb-4">
+            <input type="text" name="question" class="form-control mb-2" placeholder="अपना सवाल यहाँ लिखें..." required>
+            <button type="submit" class="btn btn-primary">पूछें</button>
+        </form>
+        {{% if response %}}
+        <div class="card p-3 bg-light">
+            <strong>जवाब:</strong><p>{{ response }}</p>
+        </div>
+        {{% endif %}}
+    </div>
+    """.replace("{{ response }}", response) + HTML_FOOTER
 
-@app.route('/ask_smart', methods=['POST'])
-def ask_smart():
-    q = request.json.get('query', '').lower()
+@app.route('/quiz')
+def quiz():
+    if 'user' not in session: return redirect('/')
+    
     try:
-        content = spreadsheet.worksheet("Content_Library").get_all_records()
-        for row in content:
-            if q in str(row['Topic']).lower(): return jsonify({"response": str(row.get('Topic_Details'))})
-        res = model.generate_content("Answer in Hindi: " + q)
-        return jsonify({"response": res.text})
-    except: return jsonify({"response": "नेटवर्क धीमा है, कृपया दोबारा प्रयास करें।"})
+        client = get_gspread_client()
+        sheet = client.open(SHEET_NAME).worksheet("Quiz_Data")
+        questions = sheet.get_all_records()
+        
+        quiz_html = ""
+        for i, q in enumerate(questions):
+            quiz_html += f"""
+            <div class="card mb-3 p-3">
+                <h5>Q{i+1}: {q['Question']}</h5>
+                <input type="radio" name="q{i}" value="A"> {q['Option_A']}<br>
+                <input type="radio" name="q{i}" value="B"> {q['Option_B']}<br>
+                <input type="radio" name="q{i}" value="C"> {q['Option_C']}<br>
+                <input type="radio" name="q{i}" value="D"> {q['Option_D']}<br>
+            </div>
+            """
+        
+        return HTML_HEADER + NAVBAR.replace("{{ user_name }}", session['user_name']) + f"""
+            <h3>📝 ऑनलाइन टेस्ट</h3>
+            <form action="/submit_quiz" method="post">
+                {quiz_html}
+                <button type="submit" class="btn btn-success">सबमिट करें</button>
+            </form>
+        </div>
+        """ + HTML_FOOTER
+    except:
+        return "टेस्ट लोड नहीं हो पाया।"
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+@app.route('/library')
+def library():
+    if 'user' not in session: return redirect('/')
+    
+    try:
+        client = get_gspread_client()
+        sheet = client.open(SHEET_NAME).worksheet("Content_Library")
+        topics = sheet.get_all_records()
+        
+        lib_html = ""
+        for topic in topics:
+            lib_html += f"""
+            <div class="col-md-6">
+                <div class="card mb-3 p-3">
+                    <h4>{topic['Topic_Name']}</h4>
+                    <p>{topic['Description']}</p>
+                    <a href="{topic['Link']}" target="_blank" class="btn btn-outline-primary btn-sm">पढ़ें</a>
+                </div>
+            </div>
+            """
+            
+        return HTML_HEADER + NAVBAR.replace("{{ user_name }}", session['user_name']) + f"""
+            <h3>📚 कंटेंट लाइब्रेरी</h3>
+            <div class="row">{lib_html}</div>
+        </div>
+        """ + HTML_FOOTER
+    except:
+        return "लाइब्रेरी लोड नहीं हो पाई।"
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    session.pop('user_name', None)
+    return redirect('/')
+
+if __name__ == "__main__":
+    app.run(debug=True)
