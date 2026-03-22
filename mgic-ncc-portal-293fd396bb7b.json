@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "mgic-ncc-portal",
+  "private_key_id": "293fd396bb7b4f43a0ee6219eb396838f1e38e05",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCsmLnRVZ8xDTTz\ntJXuJv+FECBgWA9uw9Lp6aZDqZhLVBiRtOO1IztHv4iswqKD9MR7FjS0QTYj77r4\nkVeRM+Nmk5f9LsnyZwPmba6KEZGrYElxb71DtbsaO7x3RpSh7P++9JMO1MhZZIZI\n9yxZiHSzThSDhVL8kyAE2lDVe99THnqbx5wZjMeI2871cmpD1W83RKZ3bKBzbbb/\nSfBEzP3Ea9+ZJ09CW2rVtKzBsSbqADEyoD/Lexd/JWqVlTM80/oCteqcdixSgsqL\nCMXJH94ZkNFyLW+vCCATEZEDzhMZ3wMBvaoqSE/VNoWHjEUOfnSi2cnm92bWP8Sv\nJXaH7vr/AgMBAAECggEAM9HM5GVVHNiOv+bFpxGNYQmE9vgpdgOURQeSFDmMkH1I\nvSJ2xXE1AKcoZVowifbIsP3rR/1WQHbfB3c3t9BA45DHrsvH9R/pw1rF7w00U6Re\nmJDIXdZnvQoXXSZTRMSPymjK6EaJepFcYfbYGW+HPjhgn1Y9oriXge18HISK+fyr\ne/6T0txWrj4AYZz02AAMvLexw9Z1v1mONO+6A+yjm7mnrbBpYxWxO2YBkP+LRNvh\nAoWnGFWb9EMPpzCkIodWIEmPt8ZklhMBzgr9ecRyCJDSlw6XL9QW/rmXAgrW2b9X\nCR4OPeyC0rtlEAgxIDHUyaN85eE/Ra969k+by0nSxQKBgQDk5ydFHXl+SEZlIeYT\nlhGxvBwgM/PXXSB7NSmBVW2iSyZ0shLVW9SqK5wko68MOt0jQKMp/cCiVm4cHvZM\n9HBXoY1WJ567vPffxyGw5Y08R9Dqh72G53ulOoccpQw2jClDikyubIA589NPrlr7\nHtyCHs4BUU7heKBxzPfsDK/DhQKBgQDBBzjqZnqo+2lHxSDTzP9gf5vXv1+07g5z\nb3HcHeIAUwYGhB8SewN3cm1zioiM+cNOSiovMZSylUFmhDMkj8Ij4Js8ACLtnWz+\nnlgcDeqSgYJzoBLXqKbftIoypWtCR/VfLu7V0O+o94JLgwIPELZUEzPu6+28CwC0\ne+vgOLrBswKBgQCPI5VE/Rd6RovutfIAEXnjIPSdlp9G729eXHIl9FvofwH/O1PX\no+MqvraXmtvd0/lxD/x4R7vsSAv2/c2bdcfCpL2TQJdcYuDGSOniisl1Bpu37UYx\nVBPX0O+ok/U9LwymtZcaA7Nziet8ClXObxAJNmYwIL4o9JuwTjJCo/RNWQKBgQCd\nlMXUJgEw/r3+B2I7RnmdT8/sG6GIVWeauXpcVlDwLtcWbrnnHmHAG7xavNepLyVQ\nPp+dk35vJAYWKQqPaIT3QR+5perdzMz0OFR54qqDHBNhTWbUhCxnKD5CBmU/4Prh\nz7DPARkF+bl25+bAYcZXcK3O+PBFuT3EGf6AOA/OnQKBgQDDMo1pBOMB1q1N5VFW\nV/4Co96g2ptzqQoNX9mNLnUJ8zwloU8DSZhC1bvf5sKjJM5jV+yrI/yPZvpWrboJ\nYc7iVqFZlVivvCS5x8ZuYavCY9F17cTEXcY46MR6h/6ZI+xRa9ZfuDQr6yvt6XUE\nYgKmIyRZynKGDJYqnVPePws0lQ==\n-----END PRIVATE KEY-----\n",
+  "client_email": "ncc-manager@mgic-ncc-portal.iam.gserviceaccount.com",
+  "client_id": "111528890238634783799",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ncc-manager%40mgic-ncc-portal.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
