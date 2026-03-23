@@ -8,7 +8,7 @@ import google.generativeai as genai
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "MGIC_NCC_2026_V4_4_MASTER"
+app.secret_key = "MGIC_NCC_2026_V4_5_FINAL"
 
 # --- 1. गूगल शीट कनेक्शन ---
 def get_sheet(sheet_name):
@@ -62,7 +62,7 @@ def dashboard():
     </div>
     '''
 
-# --- 4. एनसीसी स्टोर (Fixed QR & Notice) ---
+# --- 4. एनसीसी स्टोर ---
 @app.route('/store')
 def store():
     if 'user' not in session: return redirect('/')
@@ -72,10 +72,10 @@ def store():
     for p in products:
         grid_html += f'''
         <div class="product-card">
-            <img src="{p['Image_Link']}" class="product-img">
-            <h4>{p['Product_Name']}</h4>
-            <div class="price-tag">₹{p['Price']}</div>
-            <button class="btn" onclick="location.href='/buy/{p['Product_Name']}/{p['Price']}'" style="width:100%;">Buy Now</button>
+            <img src="{p.get('Image_Link', '')}" class="product-img">
+            <h4>{p.get('Product_Name', 'N/A')}</h4>
+            <div class="price-tag">₹{p.get('Price', '0')}</div>
+            <button class="btn" onclick="location.href='/buy/{p.get('Product_Name')}/{p.get('Price')}'" style="width:100%;">Buy Now</button>
         </div>
         '''
     return UI_STYLE + f'<div class="header"><h2>एनसीसी स्टोर</h2><a href="/dashboard" style="color:white;">Back</a></div><div class="notice-bar"><div class="notice-text">{notice}</div></div><div class="store-grid">{grid_html}</div>'
@@ -110,56 +110,57 @@ def buy(name, price):
     </div>
     '''
 
-# --- 5. कैडेट चर्चा (Fixed Logic & Notice) ---
+# --- 5. कैडेट चर्चा (Logic Re-Synced) ---
 @app.route('/chat', methods=['GET', 'POST'])
 def chat():
     if 'user' not in session: return redirect('/')
-    sheet = get_sheet("Chat_Messages")
-    notice = get_notice()
-    
-    if request.method == 'POST':
-        msg = request.form.get('message').strip()
-        parent_id = request.form.get('parent_id', '0')
-        now = datetime.now().strftime("%d/%m %I:%M %p")
-        sheet.append_row([now, f"{session['rank']} {session['user']}", session['reg_no'], msg, parent_id])
-        return redirect('/chat')
+    try:
+        sheet = get_sheet("Chat_Messages")
+        notice = get_notice()
+        
+        if request.method == 'POST':
+            msg = request.form.get('message', '').strip()
+            parent_id = request.form.get('parent_id', '0')
+            if msg:
+                now = datetime.now().strftime("%d/%m %I:%M %p")
+                sheet.append_row([now, f"{session['rank']} {session['user']}", session['reg_no'], msg, parent_id])
+            return redirect('/chat')
 
-    all_msgs = sheet.get_all_records()
-    chat_html = ""
-    questions = [m for m in all_msgs if str(m.get('Parent_ID')) == '0']
-    
-    for q in questions:
-        # यूनिक आईडी बनाना (Reg_No + Message का हिस्सा)
-        q_id = f"{q['Reg_No']}_{q['Message'][:15]}"
-        chat_html += f'''
-        <div class="chat-box">
-            <div class="meta">{q['Timestamp']} - {q['Name_Rank']}</div>
-            <strong>{q['Message']}</strong>
-            <form method="post" style="display:flex; margin-top:10px;">
-                <input name="message" placeholder="जवाब दें..." style="width:70%; margin:0; padding:5px;" required>
-                <input type="hidden" name="parent_id" value="{q_id}">
-                <button type="submit" class="btn" style="padding:5px; margin-left:5px;">Reply</button>
-            </form>
+        all_msgs = sheet.get_all_records()
+        chat_html = ""
+        questions = [m for m in all_msgs if str(m.get('Parent_ID', '0')) == '0']
+        
+        for q in questions:
+            # UNIQUE ID FOR REPLIES: RegNo + Timestamp
+            q_id = f"{q.get('Reg_No')}_{q.get('Timestamp')}"
+            
+            chat_html += f'''
+            <div class="chat-box">
+                <div class="meta">{q.get('Timestamp')} - {q.get('Name_Rank')}</div>
+                <strong>{q.get('Message')}</strong>
+                <form method="post" style="display:flex; margin-top:10px;">
+                    <input name="message" placeholder="जवाब दें..." style="width:70%; margin:0; padding:5px;" required>
+                    <input type="hidden" name="parent_id" value="{q_id}">
+                    <button type="submit" class="btn" style="padding:5px; margin-left:5px;">Reply</button>
+                </form>
+            '''
+            replies = [r for r in all_msgs if str(r.get('Parent_ID')) == q_id]
+            for r in replies:
+                chat_html += f'<div style="margin-left:25px; border-left:2px solid #003366; padding-left:10px; font-size:14px; margin-top:5px;"><div class="meta">{r.get("Timestamp")} - {r.get("Name_Rank")}</div>{r.get("Message")}</div>'
+            chat_html += "</div>"
+
+        return UI_STYLE + f'''
+        <div class="header"><h2>कैडेट चर्चा</h2><a href="/dashboard" style="color:white;">Back</a></div>
+        <div class="notice-bar"><div class="notice-text">{notice}</div></div>
+        <div style="padding:15px;">
+            <form method="post"><textarea name="message" placeholder="नया सवाल पूछें..." required></textarea><input type="hidden" name="parent_id" value="0"><br><button type="submit" class="btn">Post Question</button></form>
+            <hr>{chat_html if chat_html else "<p>अभी कोई चर्चा नहीं है।</p>"}
+        </div>
         '''
-        replies = [r for r in all_msgs if str(r.get('Parent_ID')) == q_id]
-        for r in replies:
-            chat_html += f'<div style="margin-left:25px; border-left:2px solid #003366; padding-left:10px; font-size:14px; margin-top:5px;"><div class="meta">{r["Timestamp"]} - {r["Name_Rank"]}</div>{r["Message"]}</div>'
-        chat_html += "</div>"
+    except Exception as e:
+        return f"चर्चा लोड करने में समस्या: {str(e)}. कृपया 'Chat_Messages' शीट के हेडर्स चेक करें।"
 
-    return UI_STYLE + f'''
-    <div class="header"><h2>कैडेट चर्चा</h2><a href="/dashboard" style="color:white;">Back</a></div>
-    <div class="notice-bar"><div class="notice-text">{notice}</div></div>
-    <div style="padding:15px;">
-        <form method="post">
-            <textarea name="message" placeholder="नया सवाल पूछें..." required></textarea>
-            <input type="hidden" name="parent_id" value="0">
-            <br><button type="submit" class="btn">Post Question</button>
-        </form>
-        <hr>{chat_html}
-    </div>
-    '''
-
-# --- 6. एआई सूबेदार (Fixed Search) ---
+# --- 6. एआई सूबेदार ---
 @app.route('/ai', methods=['GET', 'POST'])
 def ai():
     if 'user' not in session: return redirect('/')
@@ -170,11 +171,11 @@ def ai():
             genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
             model = genai.GenerativeModel('models/gemini-1.5-flash')
             library_data = get_sheet("Content_Library").get_all_records()
-            all_topics = ", ".join([row['Topic_Name'] for row in library_data])
+            all_topics = ", ".join([row.get('Topic_Name','') for row in library_data])
             prompt = f"कैडेट का सवाल: '{user_q}'. टॉपिक्स: {all_topics}. सिर्फ सटीक टॉपिक नाम लिखें।"
             matched_topic = model.generate_content(prompt).text.strip()
             for row in library_data:
-                if matched_topic.lower() in row['Topic_Name'].lower() or user_q.lower() in row['Topic_Name'].lower():
+                if matched_topic.lower() in row.get('Topic_Name','').lower() or user_q.lower() in row.get('Topic_Name','').lower():
                     results.append(row)
         except: pass
     
@@ -192,7 +193,7 @@ def ai():
     </div>
     '''
 
-# --- बाकी रूट्स (login, logout, subjects) ---
+# --- बाकी रूट्स ---
 @app.route('/')
 def login_page():
     if 'user' in session: return redirect('/dashboard')
