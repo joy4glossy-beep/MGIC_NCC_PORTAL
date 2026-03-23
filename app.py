@@ -8,7 +8,7 @@ import google.generativeai as genai
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "MGIC_NCC_2026_V4_3_DYNAMIC"
+app.secret_key = "MGIC_NCC_2026_V4_4_MASTER"
 
 # --- 1. गूगल शीट कनेक्शन ---
 def get_sheet(sheet_name):
@@ -19,27 +19,55 @@ def get_sheet(sheet_name):
     client = gspread.authorize(creds)
     return client.open("NCC_Smart_Portal_Data").worksheet(sheet_name)
 
-# --- 2. UI डिजाइन ---
+# --- 2. UI डिजाइन (iPhone 11 Optimized) ---
 UI_STYLE = '''
 <style>
     body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; margin: 0; padding-bottom: 50px; text-align: center; color: #333; }
     .header { background: linear-gradient(135deg, #003366, #00509d); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .notice-bar { background: #ffcc00; color: #000; padding: 8px; font-weight: bold; font-size: 13px; overflow: hidden; white-space: nowrap; border-bottom: 1px solid #e6b800; }
+    .notice-text { display: inline-block; animation: marquee 15s linear infinite; }
+    @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     .main-card { background: white; padding: 20px; margin: 15px auto; border-radius: 15px; box-shadow: 0 3px 10px rgba(0,0,0,0.1); width: 88%; max-width: 400px; border-left: 6px solid #003366; text-align: left; cursor: pointer; }
     .btn { background: #003366; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; }
     .store-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; padding: 15px; }
     .product-card { background: white; width: 45%; max-width: 180px; border-radius: 12px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
     .product-img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; }
     .price-tag { color: #28a745; font-weight: bold; font-size: 18px; margin: 5px 0; }
+    .chat-box { background: white; margin: 10px auto; padding: 12px; border-radius: 10px; width: 92%; text-align: left; box-shadow: 0 1px 4px rgba(0,0,0,0.1); border-left: 4px solid #ffcc00; }
     .content-box { background: white; margin: 15px auto; padding: 20px; border-radius: 15px; width: 90%; text-align: left; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     input, textarea { padding: 12px; border-radius: 8px; border: 1px solid #ddd; width: 85%; font-size: 15px; margin-bottom: 10px; }
+    .meta { font-size: 11px; color: #666; margin-bottom: 5px; }
 </style>
 '''
 
-# --- 3. स्टोर और डायनेमिक पेमेंट ---
+def get_notice():
+    try:
+        admin_data = get_sheet("Admin_Settings").get_all_records()
+        return next((row['Value'] for row in admin_data if row['Feature'] == 'Notice'), "जय हिंद कैडेट्स!")
+    except: return "MGIC NCC पोर्टल पर आपका स्वागत है!"
+
+# --- 3. डैशबोर्ड ---
+@app.route('/dashboard')
+def dashboard():
+    if 'user' not in session: return redirect('/')
+    notice = get_notice()
+    return UI_STYLE + f'''
+    <div class="header"><span>जय हिंद, {session['rank']} {session['user']}</span><a href="/logout" style="color:white; font-size:12px;">Logout</a></div>
+    <div class="notice-bar"><div class="notice-text">{notice}</div></div>
+    <div style="padding-top:10px;">
+        <div class="main-card" onclick="location.href='/subjects_list'"><h2>📘 ट्रेनिंग लाइब्रेरी</h2><p>वीडियो और नोट्स देखें</p></div>
+        <div class="main-card" onclick="location.href='/ai'" style="border-left-color:#ff5500;"><h2>🤖 एआई सूबेदार</h2><p>सटीक जानकारी पाएं</p></div>
+        <div class="main-card" onclick="location.href='/chat'" style="border-left-color:#ffcc00;"><h2>💬 कैडेट चर्चा</h2><p>आपस में बातचीत करें</p></div>
+        <div class="main-card" onclick="location.href='/store'" style="border-left-color:#28a745;"><h2>🛍️ एनसीसी स्टोर</h2><p>वर्दी और सामान खरीदें</p></div>
+    </div>
+    '''
+
+# --- 4. एनसीसी स्टोर (Fixed QR & Notice) ---
 @app.route('/store')
 def store():
     if 'user' not in session: return redirect('/')
     products = get_sheet("Product_List").get_all_records()
+    notice = get_notice()
     grid_html = ""
     for p in products:
         grid_html += f'''
@@ -50,62 +78,47 @@ def store():
             <button class="btn" onclick="location.href='/buy/{p['Product_Name']}/{p['Price']}'" style="width:100%;">Buy Now</button>
         </div>
         '''
-    return UI_STYLE + f'<div class="header"><h2>एनसीसी स्टोर</h2><a href="/dashboard" style="color:white;">Back</a></div><div class="store-grid">{grid_html}</div>'
+    return UI_STYLE + f'<div class="header"><h2>एनसीसी स्टोर</h2><a href="/dashboard" style="color:white;">Back</a></div><div class="notice-bar"><div class="notice-text">{notice}</div></div><div class="store-grid">{grid_html}</div>'
 
 @app.route('/buy/<name>/<price>', methods=['GET', 'POST'])
 def buy(name, price):
     if 'user' not in session: return redirect('/')
-    
-    # शीट से डायनेमिक क्यूआर लिंक उठाना
     try:
         settings = get_sheet("Store_Settings").get_all_records()
         qr_link = next((s['Setting_Value'] for s in settings if s['Setting_Name'] == 'Payment_QR'), "")
-    except:
-        qr_link = "https://via.placeholder.com/250?text=QR+Not+Found"
+    except: qr_link = ""
 
     if request.method == 'POST':
         tid = request.form.get('tid')
         sheet = get_sheet("Store_Orders")
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
         sheet.append_row([now, session['reg_no'], f"{session['rank']} {session['user']}", name, price, tid])
-        return UI_STYLE + f'<div style="padding-top:100px;"><h3>✅ ऑर्डर सबमिट हो गया!</h3><p>एडमिन आपकी पेमेंट चेक करके सामान डिलीवर करेंगे।</p><a href="/dashboard" class="btn">Back to Home</a></div>'
+        return UI_STYLE + f'<div style="padding-top:100px;"><h3>✅ ऑर्डर सबमिट हो गया!</h3><p>एडमिन आपकी पेमेंट चेक करेंगे।</p><a href="/dashboard" class="btn">Back to Home</a></div>'
     
     return UI_STYLE + f'''
     <div class="header"><h2>पेमेंट करें</h2><a href="/store" style="color:white;">Back</a></div>
     <div class="content-box" style="text-align:center;">
         <h3>{name} - ₹{price}</h3>
-        <p>स्कैन करके ₹{price} का भुगतान करें।</p>
+        <p>स्कैन करके भुगतान करें।</p>
         <img src="{qr_link}" style="width:250px; border:5px solid #003366; border-radius:10px; margin: 15px 0;">
         <hr>
         <form method="post">
             <p>Transaction ID / Ref No यहाँ भरें:</p>
-            <input name="tid" placeholder="Enter ID here" required>
+            <input name="tid" placeholder="Enter Transaction ID" required>
             <br><button type="submit" class="btn" style="background:#28a745; width:90%;">Confirm Order</button>
         </form>
     </div>
     '''
 
-# --- 4. डैशबोर्ड ---
-@app.route('/dashboard')
-def dashboard():
-    if 'user' not in session: return redirect('/')
-    return UI_STYLE + f'''
-    <div class="header"><span>जय हिंद, {session['rank']} {session['user']}</span><a href="/logout" style="color:white; font-size:12px;">Logout</a></div>
-    <div style="padding-top:15px;">
-        <div class="main-card" onclick="location.href='/subjects_list'"><h2>📘 ट्रेनिंग लाइब्रेरी</h2><p>वीडियो और नोट्स देखें</p></div>
-        <div class="main-card" onclick="location.href='/ai'" style="border-left-color:#ff5500;"><h2>🤖 एआई सूबेदार</h2><p>सटीक जानकारी पाएं</p></div>
-        <div class="main-card" onclick="location.href='/chat'" style="border-left-color:#ffcc00;"><h2>💬 कैडेट चर्चा</h2><p>आपस में बातचीत करें</p></div>
-        <div class="main-card" onclick="location.href='/store'" style="border-left-color:#28a745;"><h2>🛍️ एनसीसी स्टोर</h2><p>वर्दी और सामान खरीदें</p></div>
-    </div>
-    '''
-
-# --- 5. कैडेट चर्चा (Threaded) ---
+# --- 5. कैडेट चर्चा (Fixed Logic & Notice) ---
 @app.route('/chat', methods=['GET', 'POST'])
 def chat():
     if 'user' not in session: return redirect('/')
     sheet = get_sheet("Chat_Messages")
+    notice = get_notice()
+    
     if request.method == 'POST':
-        msg = request.form.get('message')
+        msg = request.form.get('message').strip()
         parent_id = request.form.get('parent_id', '0')
         now = datetime.now().strftime("%d/%m %I:%M %p")
         sheet.append_row([now, f"{session['rank']} {session['user']}", session['reg_no'], msg, parent_id])
@@ -113,18 +126,73 @@ def chat():
 
     all_msgs = sheet.get_all_records()
     chat_html = ""
-    questions = [m for m in all_msgs if str(m['Parent_ID']) == '0']
+    questions = [m for m in all_msgs if str(m.get('Parent_ID')) == '0']
+    
     for q in questions:
-        chat_html += f'<div style="background:white; margin:10px auto; padding:12px; border-radius:10px; width:92%; text-align:left; box-shadow:0 1px 4px rgba(0,0,0,0.1); border-left:4px solid #ffcc00;">'
-        chat_html += f'<div style="font-size:11px; color:#666;">{q["Timestamp"]} - {q["Name_Rank"]}</div><strong>{q["Message"]}</strong>'
-        chat_html += f'<form method="post" style="display:flex; margin-top:10px;"><input name="message" placeholder="जवाब दें..." style="width:70%; margin:0; padding:5px;" required><input type="hidden" name="parent_id" value="{q["Message"]}"><button type="submit" class="btn" style="padding:5px; margin-left:5px;">Reply</button></form>'
-        replies = [r for r in all_msgs if r['Parent_ID'] == q['Message']]
+        # यूनिक आईडी बनाना (Reg_No + Message का हिस्सा)
+        q_id = f"{q['Reg_No']}_{q['Message'][:15]}"
+        chat_html += f'''
+        <div class="chat-box">
+            <div class="meta">{q['Timestamp']} - {q['Name_Rank']}</div>
+            <strong>{q['Message']}</strong>
+            <form method="post" style="display:flex; margin-top:10px;">
+                <input name="message" placeholder="जवाब दें..." style="width:70%; margin:0; padding:5px;" required>
+                <input type="hidden" name="parent_id" value="{q_id}">
+                <button type="submit" class="btn" style="padding:5px; margin-left:5px;">Reply</button>
+            </form>
+        '''
+        replies = [r for r in all_msgs if str(r.get('Parent_ID')) == q_id]
         for r in replies:
-            chat_html += f'<div style="margin-left:25px; border-left:2px solid #003366; padding-left:10px; font-size:14px; margin-top:5px;"><div style="font-size:11px; color:#666;">{r["Timestamp"]} - {r["Name_Rank"]}</div>{r["Message"]}</div>'
+            chat_html += f'<div style="margin-left:25px; border-left:2px solid #003366; padding-left:10px; font-size:14px; margin-top:5px;"><div class="meta">{r["Timestamp"]} - {r["Name_Rank"]}</div>{r["Message"]}</div>'
         chat_html += "</div>"
-    return UI_STYLE + f'<div class="header"><h2>कैडेट चर्चा</h2><a href="/dashboard" style="color:white;">Back</a></div><div style="padding:15px;"><form method="post"><textarea name="message" placeholder="नया सवाल पूछें..." required></textarea><input type="hidden" name="parent_id" value="0"><br><button type="submit" class="btn">Post Question</button></form><hr>{chat_html}</div>'
 
-# --- बाकी रूट्स (ai, login, logout, subjects) ---
+    return UI_STYLE + f'''
+    <div class="header"><h2>कैडेट चर्चा</h2><a href="/dashboard" style="color:white;">Back</a></div>
+    <div class="notice-bar"><div class="notice-text">{notice}</div></div>
+    <div style="padding:15px;">
+        <form method="post">
+            <textarea name="message" placeholder="नया सवाल पूछें..." required></textarea>
+            <input type="hidden" name="parent_id" value="0">
+            <br><button type="submit" class="btn">Post Question</button>
+        </form>
+        <hr>{chat_html}
+    </div>
+    '''
+
+# --- 6. एआई सूबेदार (Fixed Search) ---
+@app.route('/ai', methods=['GET', 'POST'])
+def ai():
+    if 'user' not in session: return redirect('/')
+    results, user_q, notice = [], "", get_notice()
+    if request.method == 'POST':
+        user_q = request.form.get('q', '')
+        try:
+            genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+            model = genai.GenerativeModel('models/gemini-1.5-flash')
+            library_data = get_sheet("Content_Library").get_all_records()
+            all_topics = ", ".join([row['Topic_Name'] for row in library_data])
+            prompt = f"कैडेट का सवाल: '{user_q}'. टॉपिक्स: {all_topics}. सिर्फ सटीक टॉपिक नाम लिखें।"
+            matched_topic = model.generate_content(prompt).text.strip()
+            for row in library_data:
+                if matched_topic.lower() in row['Topic_Name'].lower() or user_q.lower() in row['Topic_Name'].lower():
+                    results.append(row)
+        except: pass
+    
+    res_html = ""
+    for r in results:
+        v_id = r.get('Link','').split("v=")[-1] if "v=" in r.get('Link','') else r.get('Link','').split("/")[-1]
+        res_html += f'<div class="content-box"><h3>{r.get("Topic_Name")}</h3><p>{r.get("Description","")}</p><iframe width="100%" height="200" src="https://www.youtube.com/embed/{v_id}" frameborder="0" style="border-radius:10px;"></iframe><br><a href="{r.get("Book_Link", "")}" class="btn" style="background:#28a745; margin-top:10px;">📘 Read Handbook</a></div>'
+
+    return UI_STYLE + f'''
+    <div class="header"><h2>एआई सूबेदार</h2><a href="/dashboard" style="color:white;">Back</a></div>
+    <div class="notice-bar"><div class="notice-text">{notice}</div></div>
+    <div style="padding:15px;">
+        <form method="post"><input name="q" placeholder="पूछें, कैडेट..." required><br><br><button type="submit" class="btn">खोजें</button></form>
+        {res_html}
+    </div>
+    '''
+
+# --- बाकी रूट्स (login, logout, subjects) ---
 @app.route('/')
 def login_page():
     if 'user' in session: return redirect('/dashboard')
@@ -142,36 +210,12 @@ def login():
         return "गलत पासवर्ड! <a href='/'>Retry</a>"
     except Exception as e: return f"Error: {str(e)}"
 
-@app.route('/ai', methods=['GET', 'POST'])
-def ai():
-    if 'user' not in session: return redirect('/')
-    results = []
-    user_q = ""
-    if request.method == 'POST':
-        user_q = request.form.get('q', '')
-        try:
-            genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-            model = genai.GenerativeModel('models/gemini-1.5-flash')
-            library_data = get_sheet("Content_Library").get_all_records()
-            all_topics = ", ".join([row['Topic_Name'] for row in library_data])
-            prompt = f"कैडेट का सवाल: '{user_q}'. टॉपिक्स: {all_topics}. सिर्फ सटीक टॉपिक नाम लिखें।"
-            matched_topic = model.generate_content(prompt).text.strip()
-            for row in library_data:
-                if matched_topic.lower() in row['Topic_Name'].lower() or user_q.lower() in row['Topic_Name'].lower():
-                    results.append(row)
-        except: pass
-    res_html = ""
-    for r in results:
-        v_id = r.get('Link','').split("v=")[-1] if "v=" in r.get('Link','') else r.get('Link','').split("/")[-1]
-        res_html += f'<div class="content-box"><h3>{r.get("Topic_Name")}</h3><p>{r.get("Description","")}</p><iframe width="100%" height="200" src="https://www.youtube.com/embed/{v_id}" frameborder="0" style="border-radius:10px;"></iframe><br><a href="{r.get("Book_Link", "")}" class="btn" style="background:#28a745; margin-top:10px;">📘 Read Handbook</a></div>'
-    return UI_STYLE + f'<div class="header"><h2>एआई सूबेदार</h2><a href="/dashboard" style="color:white;">Back</a></div><div style="padding:15px;"><form method="post"><input name="q" placeholder="क्या ढूंढ रहे हैं कैडेट?" required><br><br><button type="submit" class="btn">खोजें</button></form>{res_html}</div>'
-
 @app.route('/subjects_list')
 def subjects_list():
     if 'user' not in session: return redirect('/')
     lib = get_sheet("Content_Library").get_all_records()
     topics = sorted(list(set([row.get('Topic_Name') for row in lib if row.get('Topic_Name')])))
-    html = '<div class="header"><h2>विषय सूची</h2><a href="/dashboard" style="color:white;">Back</a></div>'
+    html = f'<div class="header"><h2>विषय सूची</h2><a href="/dashboard" style="color:white;">Back</a></div><div class="notice-bar"><div class="notice-text">{get_notice()}</div></div>'
     for t in topics: html += f'<div class="main-card" onclick="location.href=\'/view_subject/{t}\'"><h3>{t}</h3></div>'
     return UI_STYLE + html
 
