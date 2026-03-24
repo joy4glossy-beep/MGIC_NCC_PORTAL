@@ -11,6 +11,9 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = "MGIC_DALAN_CHHAPRA_FINAL_MASTER_V5"
 
+# ⚡ स्पीड बूस्टर: इमेज को मेमोरी में सेव करने के लिए ग्लोबल वेरिएबल
+ASSET_CACHE = {"logo": "", "bg": ""}
+
 # --- 1. गूगल शीट और इमेज इंजन ---
 def get_sheet(sheet_name):
     json_key = os.environ.get('SERVICE_ACCOUNT_JSON')
@@ -40,12 +43,19 @@ def get_b64_from_drive(drive_link):
     return ""
 
 def get_global_assets():
-    """लोगो और बैकग्राउंड को एक साथ फेच करना"""
+    """लोगो और बैकग्राउंड को एक बार लोड करके मेमोरी (Cache) में रखना"""
+    global ASSET_CACHE
+    if ASSET_CACHE["logo"] and ASSET_CACHE["bg"]:
+        return ASSET_CACHE["logo"], ASSET_CACHE["bg"]
+    
     try:
         data = get_sheet("App_Assets").get_all_records()
         logo_link = next((r['Asset_Link'] for r in data if r['Asset_Name'] == 'NCC_Logo'), "")
         bg_link = next((r['Asset_Link'] for r in data if r['Asset_Name'] == 'Portal_BG'), "")
-        return get_b64_from_drive(logo_link), get_b64_from_drive(bg_link)
+        
+        ASSET_CACHE["logo"] = get_b64_from_drive(logo_link)
+        ASSET_CACHE["bg"] = get_b64_from_drive(bg_link)
+        return ASSET_CACHE["logo"], ASSET_CACHE["bg"]
     except: return "", ""
 
 # --- 2. मास्टर UI स्टाइल (Glassmorphism & Fixed BG) ---
@@ -85,6 +95,11 @@ def get_ui_style(bg_b64="", title="MGIC NCC"):
         input, textarea {{ padding: 14px; border-radius: 12px; border: 1px solid #ddd; width: 100%; margin-bottom: 12px; font-size: 16px; box-sizing: border-box; }}
         .chat-box {{ background: rgba(255,255,255,0.92); padding: 15px; border-radius: 15px; margin-bottom: 12px; border-left: 6px solid #ffcc00; text-align: left; }}
         .meta {{ font-size: 12px; color: #777; margin-bottom: 5px; }}
+        
+        /* क्विज के लिए नए इंटरएक्टिव स्टाइल */
+        .quiz-label {{ display: block; background: rgba(240, 240, 240, 0.9); padding: 12px; margin-top: 8px; border-radius: 12px; border: 1px solid #ddd; cursor: pointer; transition: 0.2s; }}
+        .quiz-label:active {{ background: #e0e0e0; transform: scale(0.98); }}
+        .quiz-label input {{ margin-right: 12px; transform: scale(1.3); }}
     </style>
     '''
 
@@ -248,8 +263,17 @@ def quiz():
     if 'user' not in session: return redirect('/')
     logo_b64, bg_b64 = get_global_assets()
     q_data = get_sheet("Quiz_Data").get_all_records()
-    q_html = "".join([f'<div class="main-card"><h4>{q["Question"]}</h4><p style="font-size:15px;">A) {q["Opt1"]}<br>B) {q["Opt2"]}<br>C) {q["Opt3"]}</p></div>' for q in q_data[:5]])
-    return get_ui_style(bg_b64) + f'<div class="header"><b>📝 कैडेट क्विज</b><a href="/dashboard" style="color:white; text-decoration:none; margin-left:auto;">Back</a></div><div style="padding:10px;">{q_html}<button class="btn" style="background:#9c27b0;">Submit Results</button></div>' + FOOTER
+    q_html = ""
+    # ⚡ क्विज के लिए असली इंटरएक्टिव रेडियो बटन्स जोड़े गए हैं
+    for i, q in enumerate(q_data[:5]):
+        q_html += f'''
+        <div class="main-card" style="cursor:default;">
+            <h4 style="margin:0;">{q["Question"]}</h4>
+            <label class="quiz-label"><input type="radio" name="q{i}" value="A"> A) {q["Opt1"]}</label>
+            <label class="quiz-label"><input type="radio" name="q{i}" value="B"> B) {q["Opt2"]}</label>
+            <label class="quiz-label"><input type="radio" name="q{i}" value="C"> C) {q["Opt3"]}</label>
+        </div>'''
+    return get_ui_style(bg_b64) + f'<div class="header"><b>📝 कैडेट क्विज</b><a href="/dashboard" style="color:white; text-decoration:none; margin-left:auto;">Back</a></div><div style="padding:10px;">{q_html}<button class="btn" style="background:#9c27b0; margin-top:15px;">Submit Results</button></div>' + FOOTER
 
 @app.route('/logout')
 def logout():
