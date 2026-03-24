@@ -58,7 +58,7 @@ def get_global_assets():
         return ASSET_CACHE["logo"], ASSET_CACHE["bg"]
     except: return "", ""
 
-# --- 2. मास्टर UI स्टाइल (Glassmorphism & Fixed BG) ---
+# --- 2. मास्टर UI स्टाइल ---
 def get_ui_style(bg_b64="", title="MGIC NCC"):
     bg_css = f"background-image: url('data:image/png;base64,{bg_b64}');" if bg_b64 else "background: #003366;"
     return f'''
@@ -82,12 +82,13 @@ def get_ui_style(bg_b64="", title="MGIC NCC"):
         .main-card {{ 
             background: rgba(255, 255, 255, 0.88); padding: 22px; margin: 15px auto; border-radius: 20px; 
             box-shadow: 0 8px 32px rgba(0,0,0,0.2); width: 88%; max-width: 420px; backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.4); text-align: left; cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.4); text-align: left;
         }}
         .main-card h2 {{ margin: 0; font-size: 21px; color: #003366; }}
         .main-card p {{ margin: 5px 0 0; color: #555; font-size: 15px; }}
         
-        .btn {{ background: #003366; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; border: none; cursor: pointer; font-size: 16px; width: 100%; }}
+        .btn {{ background: #003366; color: white; padding: 12px 20px; border-radius: 10px; font-weight: bold; border: none; cursor: pointer; font-size: 16px; width: 100%; transition: 0.3s; }}
+        .btn:active {{ transform: scale(0.95); opacity: 0.8; }}
         .notice-bar {{ background: rgba(255, 204, 0, 0.95); color: #000; padding: 10px; font-weight: bold; font-size: 14px; overflow: hidden; white-space: nowrap; }}
         .notice-text {{ display: inline-block; animation: marquee 15s linear infinite; }}
         @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
@@ -96,7 +97,6 @@ def get_ui_style(bg_b64="", title="MGIC NCC"):
         .chat-box {{ background: rgba(255,255,255,0.92); padding: 15px; border-radius: 15px; margin-bottom: 12px; border-left: 6px solid #ffcc00; text-align: left; }}
         .meta {{ font-size: 12px; color: #777; margin-bottom: 5px; }}
         
-        /* क्विज के लिए नए इंटरएक्टिव स्टाइल */
         .quiz-label {{ display: block; background: rgba(240, 240, 240, 0.9); padding: 12px; margin-top: 8px; border-radius: 12px; border: 1px solid #ddd; cursor: pointer; transition: 0.2s; }}
         .quiz-label:active {{ background: #e0e0e0; transform: scale(0.98); }}
         .quiz-label input {{ margin-right: 12px; transform: scale(1.3); }}
@@ -159,7 +159,7 @@ def dashboard():
     </div>
     ''' + FOOTER
 
-# --- 4. लाइब्रेरी और एआई ---
+# --- 4. लाइब्रेरी और एआई (नो चेंज) ---
 
 @app.route('/subjects_list')
 def subjects_list():
@@ -205,7 +205,7 @@ def ai():
     </div>
     ''' + FOOTER
 
-# --- 5. चैट, स्टोर और क्विज ---
+# --- 5. चैट और स्टोर (नो चेंज) ---
 
 @app.route('/chat', methods=['GET', 'POST'])
 def chat():
@@ -258,22 +258,74 @@ def buy(name, price):
     </div>
     ''' + FOOTER
 
+# --- 6. 🏆 नया स्मार्ट क्विज सिस्टम (Result Saving Integrated) ---
+
 @app.route('/quiz')
 def quiz():
     if 'user' not in session: return redirect('/')
     logo_b64, bg_b64 = get_global_assets()
     q_data = get_sheet("Quiz_Data").get_all_records()
     q_html = ""
-    # ⚡ क्विज के लिए असली इंटरएक्टिव रेडियो बटन्स जोड़े गए हैं
+    # ✅ फॉर्म टैग जोड़ा गया ताकि डेटा /submit_quiz पर जाए
     for i, q in enumerate(q_data[:5]):
         q_html += f'''
         <div class="main-card" style="cursor:default;">
-            <h4 style="margin:0;">{q["Question"]}</h4>
-            <label class="quiz-label"><input type="radio" name="q{i}" value="A"> A) {q["Opt1"]}</label>
-            <label class="quiz-label"><input type="radio" name="q{i}" value="B"> B) {q["Opt2"]}</label>
-            <label class="quiz-label"><input type="radio" name="q{i}" value="C"> C) {q["Opt3"]}</label>
+            <h4 style="margin:0;">{i+1}. {q["Question"]}</h4>
+            <label class="quiz-label"><input type="radio" name="ans_{i}" value="A" required> A) {q["Opt1"]}</label>
+            <label class="quiz-label"><input type="radio" name="ans_{i}" value="B"> B) {q["Opt2"]}</label>
+            <label class="quiz-label"><input type="radio" name="ans_{i}" value="C"> C) {q["Opt3"]}</label>
         </div>'''
-    return get_ui_style(bg_b64) + f'<div class="header"><b>📝 कैडेट क्विज</b><a href="/dashboard" style="color:white; text-decoration:none; margin-left:auto;">Back</a></div><div style="padding:10px;">{q_html}<button class="btn" style="background:#9c27b0; margin-top:15px;">Submit Results</button></div>' + FOOTER
+    
+    return get_ui_style(bg_b64) + f'''
+    <div class="header"><b>📝 कैडेट क्विज</b><a href="/dashboard" style="color:white; text-decoration:none; margin-left:auto;">Back</a></div>
+    <div style="padding:10px;">
+        <form action="/submit_quiz" method="post">
+            {q_html}
+            <button type="submit" class="btn" style="background:#9c27b0; margin-top:15px;">Submit Results</button>
+        </form>
+    </div>''' + FOOTER
+
+@app.route('/submit_quiz', methods=['POST'])
+def submit_quiz():
+    if 'user' not in session: return redirect('/')
+    
+    # 1. सही जवाब लोड करें
+    q_data = get_sheet("Quiz_Data").get_all_records()
+    score = 0
+    total = 5
+    
+    # 2. कैडेट के जवाब चेक करें
+    for i in range(total):
+        user_ans = request.form.get(f'ans_{i}')
+        correct_ans = str(q_data[i].get('Correct_Ans', '')).strip().upper()
+        if user_ans == correct_ans:
+            score += 1
+            
+    # 3. गूगल शीट 'Quiz_Results' में डेटा सेव करें
+    status = "PASS" if score >= 3 else "FAIL"
+    try:
+        res_sheet = get_sheet("Quiz_Results")
+        res_sheet.append_row([
+            datetime.now().strftime("%d/%m/%Y %H:%M"),
+            session['reg_no'],
+            f"{session['rank']} {session['user']}",
+            f"{score}/{total}",
+            status
+        ])
+    except: pass
+    
+    # 4. कैडेट को रिजल्ट दिखाएं
+    logo_b64, bg_b64 = get_global_assets()
+    color = "#28a745" if status == "PASS" else "#d9534f"
+    return get_ui_style(bg_b64) + f'''
+    <div class="main-card" style="text-align:center; margin-top:50px; border-top: 10px solid {color};">
+        <h2 style="color:{color};">क्विज समाप्त!</h2>
+        <p style="font-size:18px;">जय हिंद, <b>{session['user']}</b></p>
+        <div style="font-size:40px; font-weight:bold; margin:20px 0;">{score} / {total}</div>
+        <p>आपका परिणाम: <b style="color:{color};">{status}</b></p>
+        <button onclick="location.href='/dashboard'" class="btn" style="margin-top:20px;">Back to Dashboard</button>
+    </div>
+    ''' + FOOTER
 
 @app.route('/logout')
 def logout():
